@@ -68,7 +68,6 @@ After creating the virtualenv and activating it, we recommend using
 ```bash
 pip install rivagan
 ```
-
 This will pull and install the latest stable release from [PyPI](https://pypi.org/).
 -->
 
@@ -80,8 +79,14 @@ source by running `make install` on the `stable` branch:
 ```bash
 git clone git@github.com:DAI-Lab/RivaGAN.git
 cd RivaGAN
-git checkout stable
+# git checkout stable 最新的这个版本不能直接切换到stable分支
 make install
+
+pip install tqdm
+# 由于我使用的cuda版本是cuda 11.6，所以原库里带的pytorch已经不适合我，这里需要重装最新版的pytorch
+# 需要到官网下载新版本的pytorch：https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp37-cp37m-linux_x86_64.whl
+pip uninstall torch
+pip install ./torch-1.11.0+cu115-cp37-cp37m-linux_x86_64.whl
 ```
 
 ## Install for Development
