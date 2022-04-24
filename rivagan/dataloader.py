@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from glob import glob
 from random import randint
 
@@ -63,7 +64,7 @@ class VideoDataset(Dataset):
             ok, frame = cap.read()
             frame = frame[y:y + dy, x:x + dx]
             frames.append(frame / 127.5 - 1.0)
-        x = torch.FloatTensor(frames)
+        x = torch.FloatTensor(np.array(frames))
         x = x.permute(3, 0, 1, 2)
         return x
 
