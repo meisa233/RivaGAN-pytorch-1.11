@@ -1,6 +1,18 @@
 import numpy as np
 import torch
 
+try:
+    from torch import irfft
+    from torch import rfft
+except ImportError:
+    from torch.fft import irfft2
+    from torch.fft import rfft2
+    def rfft(x, d):
+        t = rfft2(x, dim = (-d))
+        return torch.stack((t.real, t.imag), -1)
+    def irfft(x, d, signal_sizes):
+        return irfft2(torch.complex(x[:,:,0], x[:,:,1]), s = signal_sizes, dim = (-d))
+
 
 def dct1(x):
     """
@@ -12,7 +24,7 @@ def dct1(x):
     x_shape = x.shape
     x = x.view(-1, x_shape[-1])
 
-    return torch.rfft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1), 1)[:, :, 0].view(*x_shape)
+    return rfft(torch.cat([x, x.flip([1])[:, 1:-1]], dim=1), 1)[:, :, 0].view(*x_shape)
 
 
 def idct1(X):
@@ -45,7 +57,8 @@ def dct(x, norm=None):
 
     v = torch.cat([x[:, ::2], x[:, 1::2].flip([1])], dim=1)
 
-    Vc = torch.rfft(v, 1, onesided=False)
+    # Vc = rfft(v, 1, onesided=False)
+    Vc = torch.view_as_real(torch.fft.fft(v, dim=1))
 
     k = - torch.arange(N, dtype=x.dtype, device=x.device)[None, :] * np.pi / (2 * N)
     W_r = torch.cos(k)
@@ -97,7 +110,8 @@ def idct(X, norm=None):
 
     V = torch.cat([V_r.unsqueeze(2), V_i.unsqueeze(2)], dim=2)
 
-    v = torch.irfft(V, 1, onesided=False)
+    # v = irfft(V, 1, onesided=False)
+    v = torch.fft.irfft(torch.view_as_complex(V), n=V.shape[1], dim=1)
     x = v.new_zeros(v.shape)
     x[:, ::2] += v[:, :N - (N // 2)]
     x[:, 1::2] += v.flip([1])[:, :N // 2]
