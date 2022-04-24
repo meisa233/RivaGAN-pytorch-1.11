@@ -60,7 +60,7 @@ class RivaGAN(object):
         else:
             raise ValueError("Unknown model: %s" % model)
 
-    def fit(self, dataset, log_dir=False,
+    def fit(self, dataset, test_epoch=10, log_dir=False,
             seq_len=1, batch_size=12, lr=5e-4,
             use_critic=False, use_adversary=False,
             epochs=300, use_bit_inverse=True, use_noise=True):
@@ -189,40 +189,35 @@ class RivaGAN(object):
                     np.mean(metrics["train.raw_acc"]),
                     np.mean(metrics["train.mjpeg_acc"]),
                 ))
+            if epoch % test_epoch == 0:
+                # Validate
+                gc.collect()
+                self.encoder.eval()
+                self.decoder.eval()
+                iterator = tqdm(val, ncols=0)
+                with torch.no_grad():
+                    for frames in iterator:
+                        frames = frames.cuda()
+                        data = torch.zeros((frames.size(0), self.data_dim)).random_(0, 2).cuda()
 
-            # Validate
-            gc.collect()
-            self.encoder.eval()
-            self.decoder.eval()
-            iterator = tqdm(val, ncols=0)
-            with torch.no_grad():
-                for frames in iterator:
-                    frames = frames.cuda()
-                    data = torch.zeros((frames.size(0), self.data_dim)).random_(0, 2).cuda()
+                        wm_frames = self.encoder(frames, data)
+                        wm_crop_data = self.decoder(mjpeg(crop(wm_frames)))
+                        wm_scale_data = self.decoder(mjpeg(scale(wm_frames)))
+                        wm_mjpeg_data = self.decoder(mjpeg(wm_frames))
 
-                    wm_frames = self.encoder(frames, data)
-                    wm_crop_data = self.decoder(mjpeg(crop(wm_frames)))
-                    wm_scale_data = self.decoder(mjpeg(scale(wm_frames)))
-                    wm_mjpeg_data = self.decoder(mjpeg(wm_frames))
+                        metrics["val.ssim"].append(ssim(frames[:, :, 0, :, :], wm_frames[:, :, 0, :, :]).item())
+                        metrics["val.psnr"].append(psnr(frames[:, :, 0, :, :], wm_frames[:, :, 0, :, :]).item())
+                        metrics["val.crop_acc"].append(get_acc(data, wm_crop_data))
+                        metrics["val.scale_acc"].append(get_acc(data, wm_scale_data))
+                        metrics["val.mjpeg_acc"].append(get_acc(data, wm_mjpeg_data))
 
-                    metrics["val.ssim"].append(
-                        ssim(frames[:, :, 0, :, :], wm_frames[:, :, 0, :, :]).item())
-                    metrics["val.psnr"].append(
-                        psnr(frames[:, :, 0, :, :], wm_frames[:, :, 0, :, :]).item())
-                    metrics["val.crop_acc"].append(get_acc(data, wm_crop_data))
-                    metrics["val.scale_acc"].append(get_acc(data, wm_scale_data))
-                    metrics["val.mjpeg_acc"].append(get_acc(data, wm_mjpeg_data))
-
-                    iterator.set_description(
-                        "%s | SSIM %.3f | PSNR %.3f | Crop %.3f | Scale %.3f | MJPEG %.3f" % (
-                            epoch,
-                            np.mean(metrics["val.ssim"]),
-                            np.mean(metrics["val.psnr"]),
-                            np.mean(metrics["val.crop_acc"]),
-                            np.mean(metrics["val.scale_acc"]),
-                            np.mean(metrics["val.mjpeg_acc"]),
-                        )
-                    )
+                        iterator.set_description("%s | SSIM %.3f | PSNR %.3f | Crop %.3f | Scale %.3f | MJPEG %.3f" % (
+                                 epoch,
+                                 np.mean(metrics["val.ssim"]),
+                                 np.mean(metrics["val.psnr"]),
+                                 np.mean(metrics["val.crop_acc"]),
+                                 np.mean(metrics["val.scale_acc"]),
+                                 np.mean(metrics["val.mjpeg_acc"]),))
 
             metrics = {
                 k: round(np.mean(v), 3) if len(v) > 0 else "NaN"
@@ -230,8 +225,7 @@ class RivaGAN(object):
             }
             metrics["epoch"] = epoch
             history.append(metrics)
-            pd.DataFrame(history).to_csv(
-                os.path.join(log_dir, "metrics.tsv"), index=False, sep="\t")
+            pd.DataFrame(history).to_csv(os.path.join(log_dir, "metrics.tsv"), index=False, sep="\t")
             with open(os.path.join(log_dir, "metrics.json"), "wt") as fout:
                 fout.write(json.dumps(metrics, indent=2, default=lambda o: str(o)))
 
