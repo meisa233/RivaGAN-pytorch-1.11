@@ -229,7 +229,7 @@ class RivaGAN(object):
             with open(os.path.join(log_dir, "metrics.json"), "wt") as fout:
                 fout.write(json.dumps(metrics, indent=2, default=lambda o: str(o)))
 
-            torch.save(self, os.path.join(log_dir, "model.pt"))
+            torch.save(self, os.path.join(log_dir, "model_%d.pt"%epoch))
             G_scheduler.step(metrics["train.loss"])
 
         return history
@@ -240,7 +240,7 @@ class RivaGAN(object):
     def load(path_to_model):
         return torch.load(path_to_model)
 
-    def encode(self, video_in, data, video_out):
+    def encode(self, video_in, data, video_out, fps=20.0):
         assert len(data) == self.data_dim
 
         video_in = cv2.VideoCapture(video_in)
@@ -248,13 +248,13 @@ class RivaGAN(object):
         height = int(video_in.get(cv2.CAP_PROP_FRAME_HEIGHT))
         length = int(video_in.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        data = torch.FloatTensor([data]).cuda()
+        data = torch.FloatTensor(np.array([data])).cuda()
         video_out = cv2.VideoWriter(
-            video_out, cv2.VideoWriter_fourcc(*'mp4v'), 20.0, (width, height))
+            video_out, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
         for i in tqdm(range(length)):
             ok, frame = video_in.read()
-            frame = torch.FloatTensor([frame]) / 127.5 - 1.0      # (L, H, W, 3)
+            frame = torch.FloatTensor(np.array([frame])) / 127.5 - 1.0      # (L, H, W, 3)
             frame = frame.permute(3, 0, 1, 2).unsqueeze(0).cuda()  # (1, 3, L, H, W)
             wm_frame = self.encoder(frame, data)                       # (1, 3, L, H, W)
             wm_frame = torch.clamp(wm_frame, min=-1.0, max=1.0)
@@ -273,7 +273,7 @@ class RivaGAN(object):
 
         for i in tqdm(range(length)):
             ok, frame = video_in.read()
-            frame = torch.FloatTensor([frame]) / 127.5 - 1.0      # (L, H, W, 3)
+            frame = torch.FloatTensor(np.array([frame])) / 127.5 - 1.0      # (L, H, W, 3)
             frame = frame.permute(3, 0, 1, 2).unsqueeze(0).cuda()  # (1, 3, L, H, W)
             data = self.decoder(frame)[0].detach().cpu().numpy()
             yield data
